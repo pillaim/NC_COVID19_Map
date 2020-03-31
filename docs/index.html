@@ -1,6 +1,205 @@
+<!DOCTYPE html>
 <html>
-  <body>
-    <h1>NC COVID-19 Map</h1>
-    <p>This map uses data up to 03/26/2020 to visualize the confirmed case count for COVID-19 across North Carolina.</p>
-  </body>
+<head>
+
+    <title>NC COVID-19 Case Count</title>
+
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css" integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ==" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js" integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew==" crossorigin=""></script>
+
+    <script src="https://libs.cartocdn.com/carto-vl/v1.2.4/carto-vl.min.js"></script>
+    <script src="https://api.tiles.mapbox.com/mapbox-gl-js/v0.52.0/mapbox-gl.js"></script>
+    <link href="https://api.tiles.mapbox.com/mapbox-gl-js/v0.52.0/mapbox-gl.css" rel="stylesheet">
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font: 14px Helvetica;
+        }
+        #map {
+            width: 600px;
+            height: 400px;
+        }
+        .legend span, .legend label {
+            display: block;
+            width: 50px;
+            height: 18px;
+            float: left;
+            opacity: 0.7;
+            text-align: center;
+            font-size: 80%
+        }
+    </style>
+
+    <style>#map { width: 900px; height: 600px; }
+    .info { padding: 6px 8px; font: 14px/16px Arial, Helvetica, sans-serif; background: white; background: rgba(255,255,255,0.8); box-shadow: 0 0 15px rgba(0,0,0,0.2); border-radius: 5px; } .info h4 { margin: 0 0 5px; color: #777; }
+    .legend { text-align: left; line-height: 18px; color: #555; } .legend i { width: 18px; height: 18px; float: left; margin-right: 8px; opacity: 0.7; }</style>
+</head>
+<body>
+
+<div id='map'></div>
+
+<script src="https://libs.cartocdn.com/cartodb.js/v3/3.15/cartodb.js"></script>
+<script src="case_map.geojson"></script>
+
+<script type="text/javascript">
+
+    var map = L.map('map').setView([37.8, -96], 4);
+    map.createPane('labels');
+    map.getPane('labels').style.zIndex = 650;
+    map.getPane('labels').style.pointerEvents = 'none';
+
+    var positron = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png', {
+        attribution: '©OpenStreetMap, ©CartoDB'
+    }).addTo(map);
+
+    var positronLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png', {
+        attribution: '©OpenStreetMap, ©CartoDB',
+        pane: 'labels'
+    }).addTo(map);
+
+    map.fitBounds([
+        [36.653835, -75.522636],
+        [34.817328, -84.333581]
+    ]);
+
+    function fetchJSON(url) {
+        return fetch(url)
+            .then(function(response) {
+                return response.json();
+            });
+    }
+
+    // get color depending on number of confirmed covid cases
+    function getColor(d) {
+        return d > 100 ? '#034e7b' :
+            d > 50  ? '#0570b0' :
+                d > 5  ? '#3690c0' :
+                    d > 4  ? '#74a9cf' :
+                        d > 3   ? '#a6bddb' :
+                            d > 2   ? '#d0d1e6' :
+                                d > 1   ? '#ece7f2' :
+                                    '#fff7fb';
+    }
+
+    function style(feature) {
+        return {
+            fillColor: getColor(feature.properties.COUNTYNS),
+            weight: 2,
+            opacity: 1,
+            color: 'white',
+            fillOpacity: 0.7
+        };
+    }
+
+    var data = fetchJSON('case_map.geojson')
+        .then(function(data) {
+
+            // L.geoJson(data).addTo(map);
+
+            var countylayer = L.geoJson(data, {style: style}).addTo(map);
+        });
+
+    // control that shows state info on hover
+    var info = L.control();
+
+    info.onAdd = function (map) {
+        this._div = L.DomUtil.create('div', 'info');
+        this.update();
+        return this._div;
+    };
+
+    info.update = function (props) {
+        this._div.innerHTML = '<h4>COVID-19 Cases Across NC</h4>' +  (props ?
+            '<b>' + props.NAME + '</b><br />' + props.COUNTYNS + ' confirmed cases'
+            : 'Hover over a county');
+    };
+
+    info.addTo(map);
+
+    function highlightFeature(e) {
+        var layer = e.target;
+
+        // layer.setStyle({
+        //     weight: 5,
+        //     color: '#666',
+        //     dashArray: '',
+        //     fillOpacity: 0.7
+        // });
+
+        if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+            layer.bringToFront();
+        }
+
+        info.update(layer.feature.properties);
+    }
+
+    var geojson;
+
+    function resetHighlight(e) {
+        // geojson.resetStyle(e.target);
+        info.update();
+    }
+
+    function zoomToFeature(e) {
+        map.fitBounds(e.target.getBounds());
+    }
+
+    function onEachFeature(feature, layer) {
+        layer.on({
+            mouseover: highlightFeature,
+            mouseout: resetHighlight,
+            click: zoomToFeature
+        });
+    }
+
+    geojson = fetchJSON('case_map.geojson')
+        .then(function(data) {
+            L.geoJson(data,
+                {
+                    style: style,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+        });
+
+    var legend = L.control({position: 'bottomright'});
+
+
+    legend.onAdd = function (map) {
+
+        var div = L.DomUtil.create('div', 'info legend'),
+            grades = [0, 1, 2, 3, 4, 5, 50, 100];
+
+        div.innerHTML += '<div align="center"><strong>COVID-19 Confirmed Case Count</strong></div>'
+
+        // value loop
+        for (var i = 0; i < grades.length; i++) {
+            div.innerHTML +=
+                '<span style="background:' + getColor(grades[i] + 1) + '"></span> ';
+        }
+
+        div.innerHTML += '<br>';
+
+        // text loop
+        for (var i = 0; i < grades.length; i++) {
+            div.innerHTML +=
+                '<label>' + grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] : '+') + '</label>';
+        }
+        return div;
+
+    };
+
+    legend.addTo(map);
+
+</script>
+
+<p>Data updated as of 03/26/2020</p>
+
+</body>
 </html>
